@@ -1,14 +1,47 @@
-# Solar flare prediction — SHARP tabular track: data pipeline
+# Helios
 
-Builds a clean, labeled, hourly table of SHARP magnetic parameters for
-2010-05-01 → 2018-12-31, keyed by `(NOAA_AR, T_REC)` and split by active
-region. No model preprocessing or training lives here.
+![tests](https://github.com/OWNER/helios/actions/workflows/tests.yml/badge.svg)
+
+This repository is the tabular track of a solar flare prediction project, based
+on SDO/HMI **SHARP** magnetic parameters. It builds a clean, labeled, hourly
+table covering **2010-05-01 → 2018-12-31**, keyed by `(NOAA_AR, T_REC)` and
+split by active region. The table is designed to be comparable with, and later
+fused with, a separate CNN+transformer track that works on HMI magnetogram
+images.
+
+This stage is only the data pipeline. It contains no model preprocessing or
+training.
+
+### Snapshot of the current build
+
+| | |
+|---|---|
+| Labeled rows | 187,465 hourly SHARP records (within ±60° longitude) |
+| Active regions | 1,197 NOAA ARs, 136 of which have at least one positive row |
+| Positive rate (≥M1.0 within 24 h) | 2.91% |
+| Splits (train / val / test ARs) | 958 / 120 / 119 |
+
+## Repository layout
+
+```
+src/
+  fetch_sharp.py     Step 2  JSOC hmi.sharp_cea_720s keywords, hourly, resumable
+  fetch_flares.py    Step 3  HEK SWPC GOES flare list
+  build_labels.py    Step 4  cleaning + 24 h ≥M labels + 48 h flare history
+  make_splits.py     Step 5  80/10/10 split by NOAA AR (or official AR lists)
+notebooks/
+  data_checks.ipynb  Step 6  sanity plots, big-flare spot checks, correlations
+tests/               unit tests for label windows, class parsing, splits
+data/raw/            raw pulls, git-ignored (regenerate with the fetch scripts)
+data/processed/      labeled table (git-ignored) + splits.csv (tracked)
+```
 
 ## Setup
 
 ```bash
 uv venv --python 3.14 .venv            # or: python -m venv .venv
-uv pip install --python .venv/bin/python -r requirements.txt
+uv pip install --python .venv/bin/python -r requirements-dev.txt
+pytest -q
 ```
 
 `requirements.txt` pins the direct dependencies; `requirements.lock.txt` is the
@@ -116,3 +149,7 @@ that release is not verified here.** The loader accepts either a directory with
 - **Unmatched big flares.** 101 of the 772 attributed ≥M1.0 flares have no
   cleaned SHARP rows for their AR. The causes are the two items above plus limb
   and far-side regions.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

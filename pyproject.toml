@@ -1,17 +1,21 @@
 [project]
-name = "solar-flares"
+name = "helios"
 version = "0.1.0"
-description = "Add your description here"
+description = "Solar flare prediction from SHARP magnetic parameters: JSOC/HEK data pipeline with active-region labels and splits"
 readme = "README.md"
 authors = [
     { name = "Akash", email = "akashkumar052004@gmail.com" }
 ]
-requires-python = ">=3.14"
-dependencies = []
+requires-python = ">=3.12"
+dependencies = [
+    "drms",
+    "sunpy[net]",
+    "pandas",
+    "pyarrow",
+    "numpy",
+    "matplotlib",
+]
 
-[project.scripts]
-solar-flares = "solar_flares:main"
-
-[build-system]
-requires = ["uv_build>=0.12.15,<0.13.0"]
-build-backend = "uv_build"
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
