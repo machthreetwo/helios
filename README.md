@@ -1,6 +1,6 @@
 # Helios
 
-![tests](https://github.com/OWNER/helios/actions/workflows/tests.yml/badge.svg)
+![tests](https://github.com/Ak0154/helios/actions/workflows/tests.yml/badge.svg)
 
 This repository is the tabular track of a solar flare prediction project, based
 on SDO/HMI **SHARP** magnetic parameters. It builds a clean, labeled, hourly
