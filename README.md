@@ -102,4 +102,17 @@ that release is not verified here.** The loader accepts either a directory with
   for rows on 2018-12-31 are truncated by up to 24 h. This is solar minimum, so
   it has negligible impact.
 - **QUALITY.** Drops every non-zero QUALITY bit, which is strict; some bits are
-  benign.
+  benign. In particular, from **2016-04 through 2017-03, and again in 2017-08,
+  ~100% of SHARP rows have `QUALITY = 0x80`**, compared with ~10% non-zero in
+  other months. The filter empties those months, and 2016–2017 row counts
+  collapse. JSOC's keyword metadata doesn't document the bit, so check its
+  meaning before relaxing the filter. Keeping `0x80`-only rows would add about
+  14.8k rows and 95 ARs, but only 35 positives.
+- **NOAA numbers missing in JSOC for Aug–Sep 2014.** HARPs for NOAA ARs
+  ~12135–12176 have `NOAA_ARS = "MISSING"` and `NOAA_AR = 0`, so the
+  `NOAA_AR == 0` filter drops them. About 15 M/X flares in that period (including
+  the X1.6 from AR 12158 on 2014-09-10) therefore have no rows. Recovering them
+  would need an external HARP↔NOAA mapping.
+- **Unmatched big flares.** 101 of the 772 attributed ≥M1.0 flares have no
+  cleaned SHARP rows for their AR. The causes are the two items above plus limb
+  and far-side regions.
