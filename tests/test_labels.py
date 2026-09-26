@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from build_labels import add_labels, goes_class_to_flux, tai_to_utc, window_max
+from build_labels import FEATURES, add_labels, clean_sharp, goes_class_to_flux, tai_to_utc, window_max
 from make_splits import random_ar_split
 
 
@@ -54,3 +54,20 @@ def test_split_disjoint_and_deterministic(stratify):
     assert a.equals(b)
     assert a.NOAA_AR.is_unique and set(a.NOAA_AR) == set(df.NOAA_AR)
     assert a.split.value_counts().to_dict() == pytest.approx({"train": 160, "val": 20, "test": 20}, abs=2)
+
+
+def test_label_ars_all_counts_secondary_ars():
+    t = pd.date_range("2014-01-01", periods=3, freq="h")
+    df = pd.DataFrame({"NOAA_AR": [1] * 3, "NOAA_ARS": ["1,7"] * 3, "T_REC": t})
+    flares = pd.DataFrame({"ar": [7], "peak": [pd.Timestamp("2014-01-01 01:30")],
+                           "flux": [3e-5], "fl_goescls": ["M3.0"]})
+    assert add_labels(df, flares, "primary").y.tolist() == [0, 0, 0]
+    assert add_labels(df, flares, "all").y.tolist() == [1, 1, 0]
+
+
+def test_allow_quality_mask():
+    base = {f: 1.0 for f in FEATURES}
+    raw = pd.DataFrame([{**base, "QUALITY": q, "NOAA_AR": 10 + i, "LON_FWT": 0.0,
+                         "T_REC": "2014.01.01_00:00:00_TAI"} for i, q in enumerate([0, 0x80, 0x10080])])
+    assert len(clean_sharp(raw)) == 1
+    assert sorted(clean_sharp(raw, allow_quality=0x80).QUALITY) == [0, 0x80]

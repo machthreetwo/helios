@@ -16,10 +16,16 @@ Time scales: T_REC is TAI (kept as-is for the key so it matches JSOC / the
 image track); HEK flare times are UTC. Matching is done on T_REC converted to
 UTC via the leap-second table below.
 
+Options for decisions still open with the image team (defaults = spec):
+    --allow-quality 0x80     keep rows whose only QUALITY bits are in this mask
+    --label-ars all          label a row with flares from every NOAA AR in the
+                             HARP (NOAA_ARS), not only the primary NOAA_AR
+
 Usage:
-    python src/build_labels.py
+    python src/build_labels.py [--allow-quality MASK] [--label-ars primary|all]
 """
 
+import argparse
 from pathlib import Path
 
 import numpy as np
@@ -31,7 +37,8 @@ FLARES_RAW = ROOT / "data" / "raw" / "goes_flares_raw.parquet"
 OUT = ROOT / "data" / "processed" / "sharp_labeled.parquet"
 
 FEATURES = ["USFLUX", "TOTUSJH", "TOTPOT", "MEANPOT", "SAVNCPP", "R_VALUE",
-            "MEANSHR", "SHRGT45", "TOTUSJZ", "AREA_ACR", "MEANGBZ"]
+            "MEANSHR", "SHRGT45", "TOTUSJZ", "AREA_ACR", "MEANGBZ",
+            "ABSNJZH", "MEANGAM", "MEANGBT", "MEANGBH", "MEANJZD", "MEANJZH", "MEANALP"]
 LON_MAX = 60.0
 M_CLASS = 1e-5
 CLASS_FLUX = {"A": 1e-8, "B": 1e-7, "C": 1e-6, "M": 1e-5, "X": 1e-4}
@@ -56,13 +63,14 @@ def goes_class_to_flux(cls: pd.Series) -> pd.Series:
     return letter.map(CLASS_FLUX) * mult
 
 
-def clean_sharp(raw: pd.DataFrame) -> pd.DataFrame:
+def clean_sharp(raw: pd.DataFrame, allow_quality: int = 0) -> pd.DataFrame:
     df = raw.copy()
     df["T_REC"] = pd.to_datetime(df["T_REC"].str.replace("_TAI", ""), format="%Y.%m.%d_%H:%M:%S")
 
     print(f"raw SHARP rows:                    {len(df):8d}")
     steps = [
-        ("QUALITY != 0", df["QUALITY"] != 0),
+        (f"QUALITY bits outside {allow_quality:#x}" if allow_quality else "QUALITY != 0",
+         (df["QUALITY"] & ~allow_quality) != 0),
         ("NOAA_AR == 0", df["NOAA_AR"] == 0),
         ("NaN in features", df[FEATURES].isna().any(axis=1)),
         (f"|LON_FWT| > {LON_MAX:g} (or NaN)", ~(df["LON_FWT"].abs() <= LON_MAX)),
@@ -117,20 +125,34 @@ def window_max(t: np.ndarray, peaks: np.ndarray, flux: np.ndarray,
     return np.where(mask, flux[None, :], 0.0).max(axis=1)
 
 
-def add_labels(df: pd.DataFrame, flares: pd.DataFrame) -> pd.DataFrame:
-    t_utc = tai_to_utc(df["T_REC"])
+def row_ars(df: pd.DataFrame, label_ars: str) -> pd.DataFrame:
+    """(row, ar) pairs saying whose flares count for each row."""
+    if label_ars == "primary":
+        return pd.DataFrame({"row": np.arange(len(df)), "ar": df["NOAA_AR"].to_numpy()})
+    ars = df["NOAA_ARS"].astype(str).str.split(",")
+    pairs = pd.DataFrame({"row": np.arange(len(df)), "ar": ars.to_numpy()}).explode("ar")
+    pairs["ar"] = pd.to_numeric(pairs["ar"].str.strip(), errors="coerce")
+    primary = pd.DataFrame({"row": np.arange(len(df)), "ar": df["NOAA_AR"].to_numpy()})
+    pairs = pd.concat([primary, pairs.dropna()]).astype("int64").drop_duplicates()
+    return pairs[pairs["ar"] > 0]
+
+
+def add_labels(df: pd.DataFrame, flares: pd.DataFrame, label_ars: str = "primary") -> pd.DataFrame:
+    t_utc = tai_to_utc(df["T_REC"]).to_numpy()
     h24, h48, zero = np.timedelta64(24, "h"), np.timedelta64(48, "h"), np.timedelta64(0, "h")
     max24 = np.zeros(len(df))
     prior48 = np.zeros(len(df))
     fl_by_ar = {ar: g.sort_values("peak") for ar, g in flares.groupby("ar")}
-    for ar, idx in df.groupby("NOAA_AR").indices.items():
+    pairs = row_ars(df, label_ars)
+    for ar, g_rows in pairs.groupby("ar")["row"]:
         g = fl_by_ar.get(ar)
         if g is None:
             continue
-        t = t_utc.values[idx]
+        idx = g_rows.to_numpy()
+        t = t_utc[idx]
         peaks, flux = g["peak"].values, g["flux"].values
-        max24[idx] = window_max(t, peaks, flux, zero, h24)      # (t, t+24h]
-        prior48[idx] = window_max(t, peaks, flux, -h48, zero)   # (t-48h, t]
+        np.maximum.at(max24, idx, window_max(t, peaks, flux, zero, h24))      # (t, t+24h]
+        np.maximum.at(prior48, idx, window_max(t, peaks, flux, -h48, zero))   # (t-48h, t]
     out = df.copy()
     out["max_flux_24h"] = max24
     out["y"] = (max24 >= M_CLASS).astype("int8")
@@ -139,8 +161,16 @@ def add_labels(df: pd.DataFrame, flares: pd.DataFrame) -> pd.DataFrame:
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--allow-quality", type=lambda x: int(x, 0), default=0,
+                    help="QUALITY bit mask to tolerate, e.g. 0x80 (default: none)")
+    ap.add_argument("--label-ars", choices=["primary", "all"], default="primary",
+                    help="whose flares label a row: primary NOAA_AR or all ARs in NOAA_ARS")
+    args = ap.parse_args()
+    print(f"config: allow_quality={args.allow_quality:#x}, label_ars={args.label_ars}\n")
+
     raw = pd.read_parquet(SHARP_RAW)
-    df = clean_sharp(raw)
+    df = clean_sharp(raw, args.allow_quality)
     flares = clean_flares(pd.read_parquet(FLARES_RAW))
 
     # how many usable >=M flares have no matching primary NOAA_AR in the cleaned table
@@ -149,7 +179,7 @@ def main() -> None:
     print(f"  >=M1.0 flares whose AR has no cleaned SHARP rows: {(~in_table).sum()} of {len(big)} "
           f"(on disk far side / beyond +-60 deg / secondary AR in a HARP / out of date range)")
 
-    df = add_labels(df, flares)
+    df = add_labels(df, flares, args.label_ars)
     assert not df.duplicated(["NOAA_AR", "T_REC"]).any()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(OUT, index=False)
