@@ -71,3 +71,12 @@ def test_allow_quality_mask():
                          "T_REC": "2014.01.01_00:00:00_TAI"} for i, q in enumerate([0, 0x80, 0x10080])])
     assert len(clean_sharp(raw)) == 1
     assert sorted(clean_sharp(raw, allow_quality=0x80).QUALITY) == [0, 0x80]
+
+
+def test_official_splits_from_release_files():
+    from make_splits import OFFICIAL_DIR, load_official_splits
+    if not OFFICIAL_DIR.exists():
+        pytest.skip("official lists not downloaded")
+    s = load_official_splits()
+    assert s.split.value_counts().to_dict() == {"train": 1256, "val": 157, "test": 157}
+    assert s.NOAA_AR.is_unique and s.NOAA_AR.between(11000, 12999).all()

@@ -17,6 +17,7 @@ data/processed/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/processed/splits.csv
+!data/processed/splits_random.csv
 *.parquet
 *.log
 
