@@ -26,6 +26,10 @@ KEYS = [
     "HARPNUM", "NOAA_AR", "NOAA_ARS", "T_REC", "QUALITY", "LON_FWT", "LAT_FWT",
     "USFLUX", "TOTUSJH", "TOTPOT", "MEANPOT", "SAVNCPP", "R_VALUE", "MEANSHR",
     "SHRGT45", "TOTUSJZ", "AREA_ACR", "MEANGBZ",
+    # rest of the Bobra & Couvidat (2015) SHARP flare parameters
+    "ABSNJZH", "MEANGAM", "MEANGBT", "MEANGBH", "MEANJZD", "MEANJZH", "MEANALP",
+    # patch size metadata
+    "NPIX", "NACR", "SIZE_ACR",
 ]
 START, END = "2010-05-01", "2018-12-31"
 RETRIES = 5
