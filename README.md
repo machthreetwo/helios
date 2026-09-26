@@ -16,10 +16,10 @@ training.
 
 | | |
 |---|---|
-| Labeled rows | 187,465 hourly SHARP records (within ±60° longitude) |
-| Active regions | 1,197 NOAA ARs, 136 of which have at least one positive row |
-| Positive rate (≥M1.0 within 24 h) | 2.91% |
-| Splits (train / val / test ARs) | 958 / 120 / 119 |
+| Labeled rows | 202,297 hourly SHARP records (within ±60° longitude and latitude), 18 physics features |
+| Active regions | 1,292 NOAA ARs, 136 of which have at least one positive row |
+| Positive rate (≥M1.0 within 24 h) | 2.71% |
+| Official splits (train / val / test ARs) | 967 / 130 / 130; positive rate 2.74% / 2.33% / 3.13% (65 ARs not in the lists) |
 
 Open decisions shared with the image team, and the evidence behind them, are in
 [docs/data_decisions.md](docs/data_decisions.md). Progress is tracked in
@@ -159,7 +159,7 @@ no AR appears in more than one split.
   `NOAA_AR == 0` filter drops them. About 15 M/X flares in that period (including
   the X1.6 from AR 12158 on 2014-09-10) therefore have no rows. Recovering them
   would need an external HARP↔NOAA mapping.
-- **Unmatched big flares.** 101 of the 772 attributed ≥M1.0 flares have no
+- **Unmatched big flares.** 99 of the 772 attributed ≥M1.0 flares have no
   cleaned SHARP rows for their AR. The causes are the two items above plus limb
   and far-side regions.
 

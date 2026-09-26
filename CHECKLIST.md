@@ -14,8 +14,8 @@
 
 ## Data completeness (v2)
 - [x] Add the 7 missing SHARP parameters (ABSNJZH, MEANGAM, MEANGBT, MEANGBH, MEANJZD, MEANJZH, MEANALP), plus NPIX, NACR, SIZE_ACR and CALVER64
-- [ ] Re-fetch SHARP with the new keywords
-- [ ] Rebuild the labels, splits and notebook; commit and push
+- [x] Re-fetch SHARP with the new keywords
+- [x] Rebuild the labels, splits and notebook; commit and push (202,297 rows, 1,292 ARs, 2.71% positive)
 - [ ] Right page of the notes: identify "TOTF…". Lorentz-force keywords aren't in `hmi.sharp_cea_720s`
 
 ## Decisions (you + image team): evidence in [docs/data_decisions.md](docs/data_decisions.md)
