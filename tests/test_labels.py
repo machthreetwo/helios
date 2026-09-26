@@ -65,12 +65,17 @@ def test_label_ars_all_counts_secondary_ars():
     assert add_labels(df, flares, "all").y.tolist() == [1, 1, 0]
 
 
-def test_allow_quality_mask():
+def _raw(rows):
     base = {f: 1.0 for f in FEATURES}
-    raw = pd.DataFrame([{**base, "QUALITY": q, "NOAA_AR": 10 + i, "LON_FWT": 0.0,
-                         "T_REC": "2014.01.01_00:00:00_TAI"} for i, q in enumerate([0, 0x80, 0x10080])])
-    assert len(clean_sharp(raw)) == 1
-    assert sorted(clean_sharp(raw, allow_quality=0x80).QUALITY) == [0, 0x80]
+    return pd.DataFrame([{**base, "QUALITY": 0, "CALVER64": 0x42012, "NOAA_AR": 10 + i, "LON_FWT": 0.0,
+                          "LAT_FWT": 0.0, "T_REC": "2014.01.01_00:00:00_TAI", **r} for i, r in enumerate(rows)])
+
+
+def test_quality_temperror_rule():
+    raw = _raw([{}, {"QUALITY": 0x80}, {"QUALITY": 0x80, "CALVER64": 0x22012}, {"QUALITY": 0x10080}])
+    # 0x80 kept only on reprocessed calibration; any other bit still drops
+    assert sorted(clean_sharp(raw).NOAA_AR) == [10, 11]
+    assert sorted(clean_sharp(raw, strict_quality=True).NOAA_AR) == [10]
 
 
 def test_official_splits_from_release_files():
@@ -83,8 +88,6 @@ def test_official_splits_from_release_files():
 
 
 def test_max_lat_cut():
-    base = {f: 1.0 for f in FEATURES}
-    raw = pd.DataFrame([{**base, "QUALITY": 0, "NOAA_AR": 10 + i, "LON_FWT": 0.0, "LAT_FWT": lat,
-                         "T_REC": "2014.01.01_00:00:00_TAI"} for i, lat in enumerate([10.0, -59.0, 61.0])])
-    assert len(clean_sharp(raw)) == 3
-    assert sorted(clean_sharp(raw, max_lat=60).LAT_FWT) == [-59.0, 10.0]
+    raw = _raw([{"LAT_FWT": 10.0}, {"LAT_FWT": -59.0}, {"LAT_FWT": 61.0}])
+    assert sorted(clean_sharp(raw).LAT_FWT) == [-59.0, 10.0]
+    assert len(clean_sharp(raw, max_lat=90)) == 3

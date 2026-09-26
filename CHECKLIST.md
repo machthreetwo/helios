@@ -23,10 +23,10 @@
 - [x] Research what QUALITY `0x80` means (JSOC: "awaiting reprocessing"; CALVER64 suggests the rows were reprocessed)
 - [x] Check whether JSOC can fill the Aug–Sep 2014 NOAA gap (it can't)
 - [x] Compare the flare lists (758 of 763 M/X match; timing differences documented)
-- [ ] Decide: flare threshold (M1.0 vs the image team's C1.0)
-- [ ] Decide: position cut (add a ±60° latitude cut?)
-- [ ] Decide: keep QUALITY `0x80` rows (`--allow-quality 0x80`)?
-- [ ] Decide: official splits as the default `splits.csv`?
+- [x] Decide: flare threshold (M1.0)
+- [x] Decide: position cut (±60° latitude and longitude)
+- [x] Decide: keep QUALITY `0x80` rows with the reprocessed CALVER64
+- [x] Decide: official splits as `splits.csv`; ours kept as `splits_random.csv`
 - [ ] Decide: secondary ARs in a HARP (`--label-ars all`)?
 
 ## Modelling (not started)

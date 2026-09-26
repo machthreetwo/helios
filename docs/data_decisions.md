@@ -10,14 +10,18 @@ arXiv:2305.09492 (Dryad `doi:10.5061/dryad.jq2bvq898`, CC0).
 
 ## Summary
 
+Decided on 2026-09-27: #1 stays at ≥ M1.0; #3 adds the latitude cut; #4 uses
+the official lists as `splits.csv`; #6 keeps recalibrated `0x80` rows. These are
+now the pipeline defaults.
+
 | # | Decision | Helios now | Image dataset | Recommendation |
 |---|---|---|---|---|
-| 1 | Flare threshold | ≥ M1.0 | ≥ C1.0 (preconfigured; can be changed) | Agree on one. M1.0 is standard for SHARP work, and the image data can be relabelled from its event list |
+| 1 | Flare threshold | ≥ M1.0 (**decided**) | ≥ C1.0 (preconfigured; can be changed) | Agree on one. M1.0 is standard for SHARP work, and the image data can be relabelled from its event list |
 | 2 | Label window | peak in (t, t+24 h] | "within 24 hours of the peak flare time" | Same window; confirm the image team's code uses the peak time (see §5) |
-| 3 | Position cut | \|LON_FWT\| ≤ 60° (hourly, from the SHARP patch) | \|lat\| ≤ 60° **and** \|lon\| ≤ 60° (daily, from SWPC SRS) | Add \|LAT_FWT\| ≤ 60° to Helios |
-| 4 | Which ARs | every NOAA AR with a SHARP patch | only ARs whose whole disk passage falls in 2010-05-01 … 2018-12-31, minus 13 named ARs | Use the official split lists and drop ARs that aren't in them |
+| 3 | Position cut | \|LON_FWT\| ≤ 60° and \|LAT_FWT\| ≤ 60° (**decided**; hourly, from the SHARP patch) | \|lat\| ≤ 60° **and** \|lon\| ≤ 60° (daily, from SWPC SRS) | Add \|LAT_FWT\| ≤ 60° to Helios |
+| 4 | Which ARs | the official split lists (**decided**) | only ARs whose whole disk passage falls in 2010-05-01 … 2018-12-31, minus 13 named ARs | Use the official split lists and drop ARs that aren't in them |
 | 5 | Flare list | HEK, SWPC reports | SWPC event reports, parsed by the image team | Same source; see the timing differences in §5 |
-| 6 | QUALITY `0x80` rows (2016-04 … 2017-03, 2017-08) | dropped | not applicable (they use hmi.M_720s with `quality>=0`) | Keep them when CALVER64 shows the current calibration (see §1) |
+| 6 | QUALITY `0x80` rows (2016-04 … 2017-03, 2017-08) | kept when CALVER64 = reprocessed (**decided**) | not applicable (they use hmi.M_720s with `quality>=0`) | Keep them when CALVER64 shows the current calibration (see §1) |
 | 7 | Flares from secondary ARs in a HARP | not counted | not applicable (the image is centred on one NOAA AR) | Keep `primary`; this matches the one-AR-per-image setup |
 | 8 | Aug–Sep 2014 HARPs with no NOAA number | dropped | present (their images are cut out by NOAA AR number) | Known gap in Helios (see §2) |
 
@@ -48,7 +52,7 @@ arXiv:2305.09492 (Dryad `doi:10.5061/dryad.jq2bvq898`, CC0).
   That's our inference; JSOC doesn't state it.
 - **Effect of keeping them:** measured on the v1 build, it adds about 14.8k
   rows and 95 ARs but only 35 positive rows.
-- **Switch:** `python src/build_labels.py --allow-quality 0x80`
+- **Now the default.** `python src/build_labels.py --strict-quality` restores the old behaviour.
 
 ## 2. HARPs with no NOAA number, Aug–Sep 2014
 

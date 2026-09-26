@@ -32,7 +32,7 @@ src/
   fetch_sharp.py     Step 2  JSOC hmi.sharp_cea_720s keywords, hourly, resumable
   fetch_flares.py    Step 3  HEK SWPC GOES flare list
   build_labels.py    Step 4  cleaning + 24 h ≥M labels + 48 h flare history
-  make_splits.py     Step 5  80/10/10 split by NOAA AR (or official AR lists)
+  make_splits.py     Step 5  split by NOAA AR: official image-team lists (or our 80/10/10)
 notebooks/
   data_checks.ipynb  Step 6  sanity plots, big-flare spot checks, correlations
 tests/               unit tests for label windows, class parsing, splits
@@ -60,7 +60,7 @@ full `pip freeze` of the environment used to build the data.
 | 2. SHARP keywords | `python src/fetch_sharp.py --test` (one month), then `python src/fetch_sharp.py` | `data/raw/sharp_chunks/YYYY-MM.parquet`, `data/raw/sharp_hourly_raw.parquet` |
 | 3. GOES flare list | `python src/fetch_flares.py` | `data/raw/goes_flares_raw.parquet` |
 | 4. Clean + label | `python src/build_labels.py` | `data/processed/sharp_labeled.parquet` |
-| 5. AR splits | `python src/make_splits.py` (or `--official PATH`) | `data/processed/splits.csv` |
+| 5. AR splits | `python src/make_splits.py`, then `python src/make_splits.py --random --out data/processed/splits_random.csv` | `data/processed/splits.csv`, `splits_random.csv` |
 | 6. Sanity checks | `jupyter nbconvert --to notebook --execute --inplace notebooks/data_checks.ipynb` | executed notebook |
 
 `fetch_sharp.py` queries JSOC one month at a time, with retries. It skips any
@@ -75,7 +75,12 @@ Raw files are never modified after fetching. All cleaning happens in `build_labe
 - **SHARP**: JSOC series `hmi.sharp_cea_720s`, queried with `drms` at 1-hour
   cadence (`hmi.sharp_cea_720s[][<start>/<ndays>d@1h]`). Keywords: HARPNUM,
   NOAA_AR, NOAA_ARS, T_REC, QUALITY, LON_FWT, LAT_FWT, USFLUX, TOTUSJH, TOTPOT,
-  MEANPOT, SAVNCPP, R_VALUE, MEANSHR, SHRGT45, TOTUSJZ, AREA_ACR, MEANGBZ.
+  MEANPOT, SAVNCPP, R_VALUE, MEANSHR, SHRGT45, TOTUSJZ, AREA_ACR, MEANGBZ,
+  ABSNJZH, MEANGAM, MEANGBT, MEANGBH, MEANJZD, MEANJZH, MEANALP, NPIX, NACR,
+  SIZE_ACR, CALVER64.
+- **Official splits and the image team's flare list**: Boucheron et al. 2023,
+  reduced-resolution release (Dryad `doi:10.5061/dryad.jq2bvq898`, mirrored on
+  Zenodo, CC0), stored in `data/external/boucheron2023/`.
 - **Flares**: HEK via `sunpy.net.Fido`, `EventType("FL")`, `FRM.Name == "SWPC"`
   (the NOAA/SWPC GOES event list), 2010-01-01 → 2019-01-01. Columns kept:
   event_starttime, event_peaktime, event_endtime, fl_goescls, ar_noaanum.
@@ -84,10 +89,13 @@ Raw files are never modified after fetching. All cleaning happens in `build_labe
 
 1. Parse `T_REC` (`2014.01.01_00:00:00_TAI`) to a datetime. The value stays in
    **TAI** so it matches JSOC and the image track.
-2. Drop rows with `QUALITY != 0`, `NOAA_AR == 0`, or a NaN in any of the 11
-   physics features (USFLUX … MEANGBZ).
-3. Keep `|LON_FWT| <= 60°`, the same ±60° cohort the image team uses.
-4. If two HARPs have the same primary `NOAA_AR` at the same `T_REC`, keep the
+2. Drop rows with a non-zero `QUALITY`. The one exception is rows whose only
+   flag is `0x80` and whose `CALVER64` shows the reprocessed calibration
+   (`--strict-quality` drops those too; see the caveat below).
+3. Drop rows with `NOAA_AR == 0`, or a NaN in any of the 18 physics features.
+4. Keep `|LON_FWT| <= 60°` and `|LAT_FWT| <= 60°`, the same cohort the image
+   dataset uses (`--max-lat 90` turns off the latitude cut).
+5. If two HARPs have the same primary `NOAA_AR` at the same `T_REC`, keep the
    one with the larger `AREA_ACR` so that `(NOAA_AR, T_REC)` stays unique.
 
 The script prints how many rows each filter drops.
@@ -108,16 +116,15 @@ Class → flux: A=1e-8, B=1e-7, C=1e-6, M=1e-5, X=1e-4, multiplied by the number
 
 ## Splits
 
-`make_splits.py` assigns each NOAA AR to exactly one of train/val/test
-(80/10/10, seed 42). By default the split is stratified on whether the AR ever
-has a positive row; `--no-stratify` gives a plain random split. The script
-asserts that no AR appears in more than one split.
+`splits.csv` uses the image team's official AR lists (1,256 / 157 / 157 ARs),
+so both tracks train and test on the same regions. The lists give four-digit
+SWPC numbers, which the loader converts to NOAA numbers (1325 → 11325). Helios
+ARs that aren't in the official lists (mostly regions already on the disk
+before May 2010 or still on it after 2018) are left out of `splits.csv`.
 
-`load_official_splits()` / `--official PATH` loads the image team's AR lists
-from the Boucheron et al. 2023 Dryad release instead. **The exact file layout of
-that release is not verified here.** The loader accepts either a directory with
-`train*`/`val*`/`test*` files of AR numbers, or a single CSV with columns
-`(NOAA_AR, split)`. Confirm the format with the image team before relying on it.
+`splits_random.csv` is our own 80/10/10 split (seed 42), stratified on whether
+an AR ever has a positive row. Keep it for comparison. Both scripts assert that
+no AR appears in more than one split.
 
 ## Known caveats
 
@@ -140,13 +147,13 @@ that release is not verified here.** The loader accepts either a directory with
 - **End of range.** Flares are fetched up to 2019-01-01 00:00, so label windows
   for rows on 2018-12-31 are truncated by up to 24 h. This is solar minimum, so
   it has negligible impact.
-- **QUALITY.** Drops every non-zero QUALITY bit, which is strict; some bits are
-  benign. In particular, from **2016-04 through 2017-03, and again in 2017-08,
-  ~100% of SHARP rows have `QUALITY = 0x80`**, compared with ~10% non-zero in
-  other months. The filter empties those months, and 2016–2017 row counts
-  collapse. JSOC's keyword metadata doesn't document the bit, so check its
-  meaning before relaxing the filter. Keeping `0x80`-only rows would add about
-  14.8k rows and 95 ARs, but only 35 positives.
+- **QUALITY `0x80`.** From **2016-04 through 2017-03, and again in 2017-08,
+  ~100% of SHARP rows have `QUALITY = 0x80`** (`QUAL_TEMPERROR`). JSOC set this
+  flag on early "modL" data while it waited for reprocessing, and says the flag
+  should disappear afterwards. The flagged rows already carry the same
+  `CALVER64` (`0x42012`) as the clean later data, so we keep them when that is
+  the only flag set. Full evidence is in
+  [docs/data_decisions.md](docs/data_decisions.md).
 - **NOAA numbers missing in JSOC for Aug–Sep 2014.** HARPs for NOAA ARs
   ~12135–12176 have `NOAA_ARS = "MISSING"` and `NOAA_AR = 0`, so the
   `NOAA_AR == 0` filter drops them. About 15 M/X flares in that period (including

@@ -1,15 +1,16 @@
 """Split the labeled table by NOAA active region (never by row).
 
-Default: 80/10/10 train/val/test over unique NOAA ARs with a fixed seed,
-stratified on whether the AR ever has a y=1 row, so each split gets a similar
-share of flaring regions. Saves data/processed/splits.csv (NOAA_AR, split).
+Default: the image team's official AR lists (Boucheron et al. 2023, in
+data/external/boucheron2023/), so both tracks train and test on the same
+regions. Our ARs that are not in those lists are left unassigned.
+Saves data/processed/splits.csv (NOAA_AR, split).
 
-To use the image team's official AR lists (Boucheron et al. 2023 Dryad
-release) instead, see load_official_splits() and run with --official PATH.
+--random: 80/10/10 train/val/test over our unique NOAA ARs with a fixed seed,
+stratified on whether the AR ever has a y=1 row (--no-stratify for plain).
 
 Usage:
-    python src/make_splits.py
-    python src/make_splits.py --official path/to/official_splits
+    python src/make_splits.py                          # official -> splits.csv
+    python src/make_splits.py --random --out data/processed/splits_random.csv
 """
 
 import argparse
@@ -99,17 +100,21 @@ def check_and_report(df: pd.DataFrame, splits: pd.DataFrame) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--official", nargs="?", const=str(OFFICIAL_DIR),
-                    help="use official AR lists (default dir: data/external/boucheron2023)")
-    ap.add_argument("--no-stratify", action="store_true")
+    ap.add_argument("--official", type=Path, default=OFFICIAL_DIR,
+                    help="directory (or CSV) with the official AR lists")
+    ap.add_argument("--random", action="store_true", help="use our seeded 80/10/10 AR split instead")
+    ap.add_argument("--no-stratify", action="store_true", help="with --random: do not stratify")
     ap.add_argument("--out", type=Path, default=OUT, help="output CSV (default: data/processed/splits.csv)")
     args = ap.parse_args()
 
     df = pd.read_parquet(LABELED, columns=["NOAA_AR", "T_REC", "y"])
-    if args.official:
-        splits = load_official_splits(args.official)
-    else:
+    if args.random:
         splits = random_ar_split(df, stratify=not args.no_stratify)
+    else:
+        # keep only ARs present in the labeled table so splits.csv matches the data
+        splits = load_official_splits(args.official)
+        print(f"official lists: {len(splits)} ARs, {splits['NOAA_AR'].isin(df['NOAA_AR']).sum()} with Helios rows")
+        splits = splits[splits["NOAA_AR"].isin(df["NOAA_AR"])].reset_index(drop=True)
     check_and_report(df, splits)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     splits.to_csv(args.out, index=False)

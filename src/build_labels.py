@@ -16,15 +16,17 @@ Time scales: T_REC is TAI (kept as-is for the key so it matches JSOC / the
 image track); HEK flare times are UTC. Matching is done on T_REC converted to
 UTC via the leap-second table below.
 
-Options for decisions still open with the image team (defaults = spec):
-    --allow-quality 0x80     keep rows whose only QUALITY bits are in this mask
-    --label-ars all          label a row with flares from every NOAA AR in the
-                             HARP (NOAA_ARS), not only the primary NOAA_AR
-    --max-lat 60             also require |LAT_FWT| <= 60 (image dataset cuts
-                             latitude and longitude; default: no latitude cut)
+Data decisions (see docs/data_decisions.md), with switches back:
+    QUALITY     rows are kept if QUALITY == 0, or if the only bit set is 0x80
+                (QUAL_TEMPERROR, "awaiting reprocessing") and CALVER64 shows the
+                reprocessed calibration. --strict-quality keeps QUALITY == 0 only.
+    position    |LON_FWT| <= 60 and |LAT_FWT| <= 60, matching the image dataset.
+                --max-lat 90 disables the latitude cut.
+    labels      flares of the primary NOAA_AR only. --label-ars all also counts
+                every other NOAA AR in the HARP (NOAA_ARS).
 
 Usage:
-    python src/build_labels.py [--allow-quality MASK] [--label-ars primary|all]
+    python src/build_labels.py [--strict-quality] [--max-lat DEG] [--label-ars primary|all]
 """
 
 import argparse
@@ -42,6 +44,10 @@ FEATURES = ["USFLUX", "TOTUSJH", "TOTPOT", "MEANPOT", "SAVNCPP", "R_VALUE",
             "MEANSHR", "SHRGT45", "TOTUSJZ", "AREA_ACR", "MEANGBZ",
             "ABSNJZH", "MEANGAM", "MEANGBT", "MEANGBH", "MEANJZD", "MEANJZH", "MEANALP"]
 LON_MAX = 60.0
+LAT_MAX = 60.0
+QUAL_TEMPERROR = 0x80        # set by JSOC on early modL data pending reprocessing
+CALVER_MODL_MASK = 0xF0000   # CALVER64 bits that identify the calibration generation
+CALVER_REPROCESSED = 0x40000
 M_CLASS = 1e-5
 CLASS_FLUX = {"A": 1e-8, "B": 1e-7, "C": 1e-6, "M": 1e-5, "X": 1e-4}
 
@@ -65,20 +71,27 @@ def goes_class_to_flux(cls: pd.Series) -> pd.Series:
     return letter.map(CLASS_FLUX) * mult
 
 
-def clean_sharp(raw: pd.DataFrame, allow_quality: int = 0, max_lat: float | None = None) -> pd.DataFrame:
+def temperror_ok(df: pd.DataFrame) -> pd.Series:
+    """QUALITY is exactly 0x80 and CALVER64 shows the reprocessed calibration."""
+    return (df["QUALITY"] == QUAL_TEMPERROR) & \
+        ((df["CALVER64"].astype("int64") & CALVER_MODL_MASK) == CALVER_REPROCESSED)
+
+
+def clean_sharp(raw: pd.DataFrame, strict_quality: bool = False, max_lat: float = LAT_MAX) -> pd.DataFrame:
     df = raw.copy()
     df["T_REC"] = pd.to_datetime(df["T_REC"].str.replace("_TAI", ""), format="%Y.%m.%d_%H:%M:%S")
 
+    tolerated = pd.Series(False, index=df.index) if strict_quality else temperror_ok(df)
     print(f"raw SHARP rows:                    {len(df):8d}")
+    if not strict_quality:
+        print(f"  (QUALITY 0x80 on recalibrated records, tolerated: {tolerated.sum()})")
     steps = [
-        (f"QUALITY bits outside {allow_quality:#x}" if allow_quality else "QUALITY != 0",
-         (df["QUALITY"] & ~allow_quality) != 0),
+        ("QUALITY != 0", (df["QUALITY"] != 0) & ~tolerated),
         ("NOAA_AR == 0", df["NOAA_AR"] == 0),
         ("NaN in features", df[FEATURES].isna().any(axis=1)),
         (f"|LON_FWT| > {LON_MAX:g} (or NaN)", ~(df["LON_FWT"].abs() <= LON_MAX)),
+        (f"|LAT_FWT| > {max_lat:g} (or NaN)", ~(df["LAT_FWT"].abs() <= max_lat)),
     ]
-    if max_lat is not None:
-        steps.append((f"|LAT_FWT| > {max_lat:g} (or NaN)", ~(df["LAT_FWT"].abs() <= max_lat)))
     keep = pd.Series(True, index=df.index)
     for name, bad in steps:
         dropped = (keep & bad).sum()
@@ -166,18 +179,18 @@ def add_labels(df: pd.DataFrame, flares: pd.DataFrame, label_ars: str = "primary
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--allow-quality", type=lambda x: int(x, 0), default=0,
-                    help="QUALITY bit mask to tolerate, e.g. 0x80 (default: none)")
+    ap.add_argument("--strict-quality", action="store_true",
+                    help="keep QUALITY == 0 only (drop recalibrated 0x80 rows too)")
     ap.add_argument("--label-ars", choices=["primary", "all"], default="primary",
                     help="whose flares label a row: primary NOAA_AR or all ARs in NOAA_ARS")
-    ap.add_argument("--max-lat", type=float, default=None,
-                    help="also drop rows with |LAT_FWT| above this (default: no latitude cut)")
+    ap.add_argument("--max-lat", type=float, default=LAT_MAX,
+                    help="drop rows with |LAT_FWT| above this (default 60; 90 disables)")
     args = ap.parse_args()
-    print(f"config: allow_quality={args.allow_quality:#x}, label_ars={args.label_ars}, "
-          f"max_lat={args.max_lat}\n")
+    print(f"config: strict_quality={args.strict_quality}, max_lat={args.max_lat:g}, "
+          f"label_ars={args.label_ars}\n")
 
     raw = pd.read_parquet(SHARP_RAW)
-    df = clean_sharp(raw, args.allow_quality, args.max_lat)
+    df = clean_sharp(raw, args.strict_quality, args.max_lat)
     flares = clean_flares(pd.read_parquet(FLARES_RAW))
 
     # how many usable >=M flares have no matching primary NOAA_AR in the cleaned table
