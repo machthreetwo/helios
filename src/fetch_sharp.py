@@ -30,6 +30,8 @@ KEYS = [
     "ABSNJZH", "MEANGAM", "MEANGBT", "MEANGBH", "MEANJZD", "MEANJZH", "MEANALP",
     # patch size metadata
     "NPIX", "NACR", "SIZE_ACR",
+    # calibration version: tells reprocessed records apart (see QUALITY 0x80 note in README)
+    "CALVER64",
 ]
 START, END = "2010-05-01", "2018-12-31"
 RETRIES = 5
