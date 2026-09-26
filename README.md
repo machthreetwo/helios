@@ -21,6 +21,10 @@ training.
 | Positive rate (≥M1.0 within 24 h) | 2.91% |
 | Splits (train / val / test ARs) | 958 / 120 / 119 |
 
+Open decisions shared with the image team, and the evidence behind them, are in
+[docs/data_decisions.md](docs/data_decisions.md). Progress is tracked in
+[CHECKLIST.md](CHECKLIST.md).
+
 ## Repository layout
 
 ```
@@ -34,6 +38,8 @@ notebooks/
 tests/               unit tests for label windows, class parsing, splits
 data/raw/            raw pulls, git-ignored (regenerate with the fetch scripts)
 data/processed/      labeled table (git-ignored) + splits.csv (tracked)
+data/external/       official AR split lists + event list from Boucheron et al. 2023 (CC0)
+docs/                data decisions to agree with the image team
 ```
 
 ## Setup
