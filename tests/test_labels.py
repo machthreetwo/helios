@@ -80,3 +80,11 @@ def test_official_splits_from_release_files():
     s = load_official_splits()
     assert s.split.value_counts().to_dict() == {"train": 1256, "val": 157, "test": 157}
     assert s.NOAA_AR.is_unique and s.NOAA_AR.between(11000, 12999).all()
+
+
+def test_max_lat_cut():
+    base = {f: 1.0 for f in FEATURES}
+    raw = pd.DataFrame([{**base, "QUALITY": 0, "NOAA_AR": 10 + i, "LON_FWT": 0.0, "LAT_FWT": lat,
+                         "T_REC": "2014.01.01_00:00:00_TAI"} for i, lat in enumerate([10.0, -59.0, 61.0])])
+    assert len(clean_sharp(raw)) == 3
+    assert sorted(clean_sharp(raw, max_lat=60).LAT_FWT) == [-59.0, 10.0]

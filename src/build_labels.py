@@ -20,6 +20,8 @@ Options for decisions still open with the image team (defaults = spec):
     --allow-quality 0x80     keep rows whose only QUALITY bits are in this mask
     --label-ars all          label a row with flares from every NOAA AR in the
                              HARP (NOAA_ARS), not only the primary NOAA_AR
+    --max-lat 60             also require |LAT_FWT| <= 60 (image dataset cuts
+                             latitude and longitude; default: no latitude cut)
 
 Usage:
     python src/build_labels.py [--allow-quality MASK] [--label-ars primary|all]
@@ -63,7 +65,7 @@ def goes_class_to_flux(cls: pd.Series) -> pd.Series:
     return letter.map(CLASS_FLUX) * mult
 
 
-def clean_sharp(raw: pd.DataFrame, allow_quality: int = 0) -> pd.DataFrame:
+def clean_sharp(raw: pd.DataFrame, allow_quality: int = 0, max_lat: float | None = None) -> pd.DataFrame:
     df = raw.copy()
     df["T_REC"] = pd.to_datetime(df["T_REC"].str.replace("_TAI", ""), format="%Y.%m.%d_%H:%M:%S")
 
@@ -75,6 +77,8 @@ def clean_sharp(raw: pd.DataFrame, allow_quality: int = 0) -> pd.DataFrame:
         ("NaN in features", df[FEATURES].isna().any(axis=1)),
         (f"|LON_FWT| > {LON_MAX:g} (or NaN)", ~(df["LON_FWT"].abs() <= LON_MAX)),
     ]
+    if max_lat is not None:
+        steps.append((f"|LAT_FWT| > {max_lat:g} (or NaN)", ~(df["LAT_FWT"].abs() <= max_lat)))
     keep = pd.Series(True, index=df.index)
     for name, bad in steps:
         dropped = (keep & bad).sum()
@@ -166,11 +170,14 @@ def main() -> None:
                     help="QUALITY bit mask to tolerate, e.g. 0x80 (default: none)")
     ap.add_argument("--label-ars", choices=["primary", "all"], default="primary",
                     help="whose flares label a row: primary NOAA_AR or all ARs in NOAA_ARS")
+    ap.add_argument("--max-lat", type=float, default=None,
+                    help="also drop rows with |LAT_FWT| above this (default: no latitude cut)")
     args = ap.parse_args()
-    print(f"config: allow_quality={args.allow_quality:#x}, label_ars={args.label_ars}\n")
+    print(f"config: allow_quality={args.allow_quality:#x}, label_ars={args.label_ars}, "
+          f"max_lat={args.max_lat}\n")
 
     raw = pd.read_parquet(SHARP_RAW)
-    df = clean_sharp(raw, args.allow_quality)
+    df = clean_sharp(raw, args.allow_quality, args.max_lat)
     flares = clean_flares(pd.read_parquet(FLARES_RAW))
 
     # how many usable >=M flares have no matching primary NOAA_AR in the cleaned table
